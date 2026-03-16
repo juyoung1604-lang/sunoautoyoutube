@@ -1,0 +1,31 @@
+# 가상환경
+venv/
+.venv/
+env/
+
+# YouTube 인증 정보 (절대 올리면 안됨!)
+credentials/youtube_token.pickle
+credentials/client_secrets.json
+
+# API 키
+.env
+*.env
+
+# 다운로드 폴더 (음악 파일)
+suno_downloads/
+
+# 업로드 로그
+upload_log.jsonl
+
+# Python 캐시
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# macOS
+.DS_Store
+
+# 임시 생성 파일
+*_video.mp4
+*_thumb.jpg

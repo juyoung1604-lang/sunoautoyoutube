@@ -1,0 +1,551 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>🎵 Suno YouTube 자동 업로더</title>
+<style>
+  :root {
+    --bg: #0d0d1a;
+    --card: #161628;
+    --border: #2a2a4a;
+    --accent: #7c3aed;
+    --accent2: #a855f7;
+    --success: #10b981;
+    --warning: #f59e0b;
+    --danger: #ef4444;
+    --text: #e2e8f0;
+    --muted: #94a3b8;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: var(--bg); color: var(--text); font-family: 'Segoe UI', -apple-system, sans-serif; min-height: 100vh; }
+
+  /* 헤더 */
+  header {
+    background: linear-gradient(135deg, #1e0a3c 0%, #0d0d1a 100%);
+    border-bottom: 1px solid var(--border);
+    padding: 16px 24px;
+    display: flex; align-items: center; gap: 12px;
+  }
+  header h1 { font-size: 1.3rem; font-weight: 700; }
+  header .badge {
+    padding: 3px 10px; border-radius: 20px; font-size: 0.75rem; font-weight: 600;
+    background: var(--accent); color: white;
+  }
+  .status-dot {
+    width: 10px; height: 10px; border-radius: 50%;
+    background: var(--muted); margin-left: auto;
+    transition: background 0.3s;
+  }
+  .status-dot.active { background: var(--success); box-shadow: 0 0 8px var(--success); animation: pulse 1.5s infinite; }
+  @keyframes pulse { 0%,100% { opacity:1 } 50% { opacity:0.5 } }
+
+  /* 레이아웃 */
+  .container { max-width: 1200px; margin: 0 auto; padding: 24px; display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+  @media (max-width: 768px) { .container { grid-template-columns: 1fr; } }
+  .full-width { grid-column: 1 / -1; }
+
+  /* 카드 */
+  .card {
+    background: var(--card); border: 1px solid var(--border);
+    border-radius: 12px; padding: 20px;
+  }
+  .card-title {
+    font-size: 0.85rem; font-weight: 600; color: var(--muted);
+    text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 16px;
+  }
+
+  /* 탭 */
+  .tabs { display: flex; gap: 4px; margin-bottom: 20px; background: var(--card); border-radius: 8px; padding: 4px; border: 1px solid var(--border); }
+  .tab { flex: 1; padding: 8px; border: none; background: transparent; color: var(--muted); cursor: pointer; border-radius: 6px; font-size: 0.9rem; transition: all 0.2s; }
+  .tab.active { background: var(--accent); color: white; font-weight: 600; }
+
+  /* 드래그앤드롭 */
+  #drop-zone {
+    border: 2px dashed var(--border); border-radius: 10px;
+    padding: 40px 20px; text-align: center; cursor: pointer;
+    transition: all 0.2s; position: relative;
+  }
+  #drop-zone:hover, #drop-zone.dragover {
+    border-color: var(--accent2); background: rgba(124,58,237,0.08);
+  }
+  #drop-zone .icon { font-size: 2.5rem; margin-bottom: 10px; }
+  #drop-zone p { color: var(--muted); font-size: 0.9rem; }
+  #drop-zone input[type=file] { position: absolute; inset: 0; opacity: 0; cursor: pointer; width: 100%; height: 100%; }
+  #selected-file { margin-top: 10px; font-size: 0.85rem; color: var(--accent2); font-weight: 600; }
+
+  /* 폼 */
+  .form-group { margin-bottom: 14px; }
+  label { display: block; font-size: 0.8rem; color: var(--muted); margin-bottom: 5px; font-weight: 500; }
+  input, select, textarea {
+    width: 100%; padding: 9px 12px; background: #1e1e35;
+    border: 1px solid var(--border); border-radius: 8px; color: var(--text);
+    font-size: 0.9rem; transition: border-color 0.2s;
+  }
+  input:focus, select:focus, textarea:focus { outline: none; border-color: var(--accent); }
+  select option { background: #1e1e35; }
+
+  /* 버튼 */
+  .btn {
+    padding: 10px 20px; border: none; border-radius: 8px; cursor: pointer;
+    font-size: 0.9rem; font-weight: 600; transition: all 0.2s; display: inline-flex; align-items: center; gap: 6px;
+  }
+  .btn-primary { background: var(--accent); color: white; width: 100%; justify-content: center; margin-top: 8px; }
+  .btn-primary:hover { background: var(--accent2); }
+  .btn-primary:disabled { background: #3d3d5c; color: var(--muted); cursor: not-allowed; }
+  .btn-success { background: var(--success); color: white; }
+  .btn-success:hover { filter: brightness(1.1); }
+  .btn-danger { background: var(--danger); color: white; }
+  .btn-danger:hover { filter: brightness(1.1); }
+  .btn-sm { padding: 6px 12px; font-size: 0.8rem; }
+
+  /* 진행 상황 */
+  #progress-card { display: none; }
+  #progress-card.visible { display: block; }
+  .steps { display: flex; gap: 8px; margin-bottom: 16px; }
+  .step {
+    flex: 1; padding: 10px; border-radius: 8px; text-align: center;
+    font-size: 0.8rem; font-weight: 600; border: 1px solid var(--border);
+    background: #1e1e35; color: var(--muted); transition: all 0.4s;
+  }
+  .step.active { background: rgba(124,58,237,0.2); border-color: var(--accent); color: var(--accent2); }
+  .step.done { background: rgba(16,185,129,0.15); border-color: var(--success); color: var(--success); }
+  .progress-bar-wrap { background: #1e1e35; border-radius: 20px; height: 6px; overflow: hidden; }
+  .progress-bar { height: 100%; border-radius: 20px; background: linear-gradient(90deg, var(--accent), var(--accent2)); transition: width 0.5s; width: 0%; }
+
+  /* 콘솔 */
+  #console {
+    background: #0a0a14; border-radius: 8px; padding: 14px;
+    height: 240px; overflow-y: auto; font-family: 'Courier New', monospace; font-size: 0.78rem;
+    border: 1px solid var(--border);
+  }
+  .log-line { padding: 1px 0; color: #94a3b8; }
+  .log-line .ts { color: #4a4a6a; margin-right: 6px; }
+
+  /* 히스토리 */
+  #history-list { max-height: 340px; overflow-y: auto; }
+  .history-item {
+    display: flex; align-items: center; gap: 12px; padding: 12px;
+    border-radius: 8px; border: 1px solid var(--border);
+    margin-bottom: 8px; background: #1a1a2e; transition: border-color 0.2s;
+  }
+  .history-item:hover { border-color: var(--accent); }
+  .history-thumb { width: 48px; height: 27px; background: var(--accent); border-radius: 4px; display: flex; align-items: center; justify-content: center; font-size: 1rem; flex-shrink: 0; }
+  .history-info { flex: 1; min-width: 0; }
+  .history-title { font-size: 0.88rem; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .history-meta { font-size: 0.75rem; color: var(--muted); margin-top: 2px; }
+  .history-link { color: var(--accent2); text-decoration: none; font-size: 0.78rem; white-space: nowrap; flex-shrink: 0; }
+  .history-link:hover { text-decoration: underline; }
+
+  /* 감시 모드 */
+  #watch-status {
+    padding: 12px; border-radius: 8px; text-align: center; font-size: 0.88rem;
+    background: #1e1e35; border: 1px solid var(--border); margin-bottom: 14px;
+  }
+  #watch-status.active { background: rgba(16,185,129,0.1); border-color: var(--success); color: var(--success); }
+
+  /* 토스트 */
+  #toast {
+    position: fixed; bottom: 24px; right: 24px; z-index: 999;
+    padding: 14px 20px; border-radius: 10px; font-size: 0.9rem; font-weight: 600;
+    opacity: 0; transform: translateY(10px); transition: all 0.3s;
+    max-width: 320px; pointer-events: none;
+  }
+  #toast.show { opacity: 1; transform: translateY(0); }
+  #toast.success { background: var(--success); color: white; }
+  #toast.error { background: var(--danger); color: white; }
+  #toast.info { background: var(--accent); color: white; }
+
+  ::-webkit-scrollbar { width: 5px; height: 5px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+</style>
+</head>
+<body>
+
+<header>
+  <span style="font-size:1.5rem">🎵</span>
+  <h1>Suno YouTube 자동 업로더</h1>
+  <span class="badge">Web UI</span>
+  <div class="status-dot" id="conn-dot" title="서버 연결 상태"></div>
+</header>
+
+<div class="container">
+
+  <!-- 왼쪽: 업로드 / 감시 탭 -->
+  <div>
+    <div class="tabs">
+      <button class="tab active" onclick="switchTab('upload')">📤 파일 업로드</button>
+      <button class="tab" onclick="switchTab('watch')">👀 폴더 감시</button>
+    </div>
+
+    <!-- 파일 업로드 패널 -->
+    <div id="tab-upload">
+      <div class="card">
+        <div class="card-title">MP3 / WAV 업로드</div>
+
+        <div id="drop-zone" onclick="document.getElementById('file-input').click()">
+          <input type="file" id="file-input" accept=".mp3,.wav" onchange="onFileSelected(this)">
+          <div class="icon">🎵</div>
+          <p>파일을 여기에 드래그하거나 클릭하세요</p>
+          <p style="margin-top:4px; font-size:0.8rem">MP3, WAV 지원</p>
+          <div id="selected-file"></div>
+        </div>
+
+        <div style="margin-top:16px">
+          <div class="form-group">
+            <label>아티스트 페르소나</label>
+            <input type="text" id="up-persona" value="감성 인디 음악 아티스트" placeholder="예: 새벽 감성 인디 가수">
+          </div>
+          <div class="form-group">
+            <label>공개 설정</label>
+            <select id="up-privacy">
+              <option value="private">🔒 비공개 (private)</option>
+              <option value="unlisted">🔗 링크 공개 (unlisted)</option>
+              <option value="public">🌐 전체 공개 (public)</option>
+            </select>
+          </div>
+          <button class="btn btn-primary" id="upload-btn" onclick="startUpload()" disabled>
+            ⬆️ YouTube에 업로드
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- 폴더 감시 패널 -->
+    <div id="tab-watch" style="display:none">
+      <div class="card">
+        <div class="card-title">자동 폴더 감시</div>
+        <div id="watch-status">⏹ 감시 중지됨</div>
+
+        <div class="form-group">
+          <label>감시 폴더</label>
+          <input type="text" id="w-folder" value="./suno_downloads">
+        </div>
+        <div class="form-group">
+          <label>아티스트 페르소나</label>
+          <input type="text" id="w-persona" value="감성 인디 음악 아티스트">
+        </div>
+        <div class="form-group">
+          <label>공개 설정</label>
+          <select id="w-privacy">
+            <option value="private">🔒 비공개</option>
+            <option value="unlisted">🔗 링크 공개</option>
+            <option value="public">🌐 전체 공개</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label>확인 간격 (초)</label>
+          <input type="number" id="w-interval" value="15" min="5" max="300">
+        </div>
+        <div style="display:flex; gap:8px; margin-top:8px">
+          <button class="btn btn-success" id="watch-start-btn" onclick="startWatch()" style="flex:1; justify-content:center">
+            ▶ 감시 시작
+          </button>
+          <button class="btn btn-danger" id="watch-stop-btn" onclick="stopWatch()" style="flex:1; justify-content:center" disabled>
+            ■ 감시 중지
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 오른쪽: 진행 상황 + 콘솔 -->
+  <div style="display:flex; flex-direction:column; gap:20px">
+
+    <!-- 진행 상황 -->
+    <div class="card" id="progress-card">
+      <div class="card-title">처리 진행 상황</div>
+      <div id="processing-file" style="font-size:0.88rem; margin-bottom:12px; color:var(--accent2)"></div>
+      <div class="steps">
+        <div class="step" id="step-1">📝<br>메타데이터</div>
+        <div class="step" id="step-2">🎨<br>썸네일</div>
+        <div class="step" id="step-3">🎬<br>업로드</div>
+      </div>
+      <div class="progress-bar-wrap">
+        <div class="progress-bar" id="prog-bar"></div>
+      </div>
+    </div>
+
+    <!-- 실시간 콘솔 -->
+    <div class="card" style="flex:1">
+      <div class="card-title" style="display:flex; justify-content:space-between; align-items:center">
+        <span>실시간 로그</span>
+        <button class="btn btn-sm" onclick="clearConsole()" style="background:#1e1e35; color:var(--muted); border:1px solid var(--border)">지우기</button>
+      </div>
+      <div id="console"></div>
+    </div>
+  </div>
+
+  <!-- 전체 너비: 업로드 히스토리 -->
+  <div class="card full-width">
+    <div class="card-title" style="display:flex; justify-content:space-between; align-items:center">
+      <span>업로드 히스토리</span>
+      <button class="btn btn-sm" onclick="loadHistory()" style="background:#1e1e35; color:var(--muted); border:1px solid var(--border)">새로고침</button>
+    </div>
+    <div id="history-list">
+      <p style="color:var(--muted); font-size:0.85rem; text-align:center; padding:20px">로딩 중...</p>
+    </div>
+  </div>
+
+</div>
+
+<!-- 토스트 -->
+<div id="toast"></div>
+
+<script>
+// ─── 상태 ─────────────────────────────────────────────
+let selectedFile = null;
+let isProcessing = false;
+let watchMode = false;
+let eventSource = null;
+
+// ─── SSE 연결 ─────────────────────────────────────────
+function connectSSE() {
+  if (eventSource) eventSource.close();
+  eventSource = new EventSource('/events');
+
+  eventSource.onopen = () => {
+    document.getElementById('conn-dot').classList.add('active');
+  };
+  eventSource.onerror = () => {
+    document.getElementById('conn-dot').classList.remove('active');
+    setTimeout(connectSSE, 3000);
+  };
+
+  eventSource.addEventListener('init', e => {
+    const d = JSON.parse(e.data);
+    isProcessing = d.is_processing;
+    watchMode = d.watch_mode;
+    updateUI();
+  });
+
+  eventSource.addEventListener('log', e => {
+    const d = JSON.parse(e.data);
+    appendLog(d.time, d.msg);
+  });
+
+  eventSource.addEventListener('progress', e => {
+    const d = JSON.parse(e.data);
+    setStep(d.step);
+  });
+
+  eventSource.addEventListener('status', e => {
+    const d = JSON.parse(e.data);
+    isProcessing = d.is_processing;
+    if (d.current_file) {
+      document.getElementById('processing-file').textContent = '🎵 ' + d.current_file;
+      document.getElementById('progress-card').classList.add('visible');
+    } else {
+      document.getElementById('progress-card').classList.remove('visible');
+    }
+    updateUI();
+  });
+
+  eventSource.addEventListener('done', e => {
+    const d = JSON.parse(e.data);
+    if (d.success) {
+      showToast(`✅ 업로드 완료!\n${d.title}`, 'success');
+      loadHistory();
+      setStep(0);
+    } else {
+      showToast(`❌ 업로드 실패: ${d.error || d.file}`, 'error');
+    }
+    selectedFile = null;
+    document.getElementById('selected-file').textContent = '';
+    document.getElementById('upload-btn').disabled = true;
+    document.getElementById('progress-card').classList.remove('visible');
+  });
+
+  eventSource.addEventListener('watch', e => {
+    const d = JSON.parse(e.data);
+    watchMode = d.active;
+    updateWatchUI();
+    if (d.active) showToast('👀 폴더 감시 시작됨', 'info');
+    else showToast('⏹ 폴더 감시 중지됨', 'info');
+  });
+}
+
+// ─── 탭 전환 ──────────────────────────────────────────
+function switchTab(name) {
+  document.getElementById('tab-upload').style.display = name === 'upload' ? '' : 'none';
+  document.getElementById('tab-watch').style.display = name === 'watch' ? '' : 'none';
+  document.querySelectorAll('.tab').forEach((el, i) => {
+    el.classList.toggle('active', (i === 0 && name === 'upload') || (i === 1 && name === 'watch'));
+  });
+}
+
+// ─── 드래그앤드롭 ─────────────────────────────────────
+const dropZone = document.getElementById('drop-zone');
+dropZone.addEventListener('dragover', e => { e.preventDefault(); dropZone.classList.add('dragover'); });
+dropZone.addEventListener('dragleave', () => dropZone.classList.remove('dragover'));
+dropZone.addEventListener('drop', e => {
+  e.preventDefault();
+  dropZone.classList.remove('dragover');
+  const f = e.dataTransfer.files[0];
+  if (f) setFile(f);
+});
+
+function onFileSelected(input) {
+  if (input.files[0]) setFile(input.files[0]);
+}
+
+function setFile(f) {
+  if (!f.name.match(/\.(mp3|wav)$/i)) {
+    showToast('MP3 또는 WAV 파일만 가능합니다', 'error');
+    return;
+  }
+  selectedFile = f;
+  document.getElementById('selected-file').textContent = '✅ ' + f.name + ' (' + (f.size/1024/1024).toFixed(1) + ' MB)';
+  document.getElementById('upload-btn').disabled = isProcessing;
+}
+
+// ─── 업로드 ───────────────────────────────────────────
+async function startUpload() {
+  if (!selectedFile) return;
+  if (isProcessing) { showToast('현재 다른 파일 처리 중입니다', 'error'); return; }
+
+  const formData = new FormData();
+  formData.append('file', selectedFile);
+  formData.append('persona', document.getElementById('up-persona').value);
+  formData.append('privacy', document.getElementById('up-privacy').value);
+
+  document.getElementById('upload-btn').disabled = true;
+  showToast('📤 업로드 시작...', 'info');
+
+  const res = await fetch('/api/upload', { method: 'POST', body: formData });
+  const data = await res.json();
+  if (!res.ok) {
+    showToast('❌ ' + data.error, 'error');
+    document.getElementById('upload-btn').disabled = false;
+  }
+}
+
+// ─── 폴더 감시 ────────────────────────────────────────
+async function startWatch() {
+  const body = {
+    folder: document.getElementById('w-folder').value,
+    persona: document.getElementById('w-persona').value,
+    privacy: document.getElementById('w-privacy').value,
+    interval: document.getElementById('w-interval').value,
+  };
+  const res = await fetch('/api/watch/start', {
+    method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify(body)
+  });
+  if (!res.ok) {
+    const d = await res.json();
+    showToast('❌ ' + d.error, 'error');
+  }
+}
+
+async function stopWatch() {
+  await fetch('/api/watch/stop', { method: 'POST' });
+}
+
+// ─── 진행 스텝 ────────────────────────────────────────
+function setStep(n) {
+  for (let i = 1; i <= 3; i++) {
+    const el = document.getElementById('step-' + i);
+    el.className = 'step' + (i < n ? ' done' : i === n ? ' active' : '');
+  }
+  document.getElementById('prog-bar').style.width = (n / 3 * 100) + '%';
+}
+
+// ─── 콘솔 ─────────────────────────────────────────────
+function appendLog(ts, msg) {
+  const c = document.getElementById('console');
+  const div = document.createElement('div');
+  div.className = 'log-line';
+  div.innerHTML = `<span class="ts">${ts}</span>${escHtml(msg)}`;
+  c.appendChild(div);
+  c.scrollTop = c.scrollHeight;
+}
+
+function clearConsole() {
+  document.getElementById('console').innerHTML = '';
+}
+
+// ─── 히스토리 ─────────────────────────────────────────
+async function loadHistory() {
+  const res = await fetch('/api/logs');
+  const records = await res.json();
+  const list = document.getElementById('history-list');
+  if (!records.length) {
+    list.innerHTML = '<p style="color:var(--muted); font-size:0.85rem; text-align:center; padding:20px">아직 업로드 기록이 없습니다</p>';
+    return;
+  }
+  list.innerHTML = records.map(r => `
+    <div class="history-item">
+      <div class="history-thumb">🎵</div>
+      <div class="history-info">
+        <div class="history-title">${escHtml(r.title || r.file)}</div>
+        <div class="history-meta">${r.timestamp} &nbsp;·&nbsp; ${escHtml(r.video_id || '')}</div>
+      </div>
+      <a class="history-link" href="${escHtml(r.url)}" target="_blank">YouTube ↗</a>
+    </div>
+  `).join('');
+}
+
+// ─── UI 상태 동기화 ────────────────────────────────────
+function updateUI() {
+  document.getElementById('upload-btn').disabled = isProcessing || !selectedFile;
+  updateWatchUI();
+}
+
+function updateWatchUI() {
+  const ws = document.getElementById('watch-status');
+  const startBtn = document.getElementById('watch-start-btn');
+  const stopBtn = document.getElementById('watch-stop-btn');
+  if (watchMode) {
+    ws.className = 'active';
+    ws.textContent = '🟢 폴더 감시 중...';
+    startBtn.disabled = true;
+    stopBtn.disabled = false;
+  } else {
+    ws.className = '';
+    ws.textContent = '⏹ 감시 중지됨';
+    startBtn.disabled = false;
+    stopBtn.disabled = true;
+  }
+}
+
+// ─── 토스트 ───────────────────────────────────────────
+let toastTimer;
+function showToast(msg, type='info') {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.className = 'show ' + type;
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => { t.className = type; }, 4000);
+}
+
+// ─── 유틸 ─────────────────────────────────────────────
+function escHtml(s) {
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+// ─── 초기화 ───────────────────────────────────────────
+async function init() {
+  connectSSE();
+  // 기존 로그 불러오기
+  const res = await fetch('/api/console');
+  const logs = await res.json();
+  logs.forEach(l => appendLog(l.time, l.msg));
+  loadHistory();
+  // 현재 상태 확인
+  const sr = await fetch('/api/status');
+  const s = await sr.json();
+  isProcessing = s.is_processing;
+  watchMode = s.watch_mode;
+  if (s.current_file) {
+    document.getElementById('processing-file').textContent = '🎵 ' + s.current_file;
+    document.getElementById('progress-card').classList.add('visible');
+    setStep(s.step);
+  }
+  updateUI();
+}
+
+init();
+</script>
+</body>
+</html>
