@@ -5,6 +5,7 @@ OAuth 2.0 인증 포함
 
 import os
 import pickle
+import tempfile
 from pathlib import Path
 
 import google.oauth2.credentials
@@ -13,6 +14,7 @@ import googleapiclient.discovery
 import googleapiclient.errors
 from googleapiclient.http import MediaFileUpload
 from google.auth.transport.requests import Request
+from PIL import Image
 
 
 SCOPES = [
@@ -21,18 +23,21 @@ SCOPES = [
 ]
 API_SERVICE_NAME = "youtube"
 API_VERSION = "v3"
-TOKEN_FILE = "credentials/youtube_token.pickle"
 
 
 class YouTubeUploader:
-    def __init__(self, credentials_file: str):
+    def __init__(self, credentials_file: str, token_file: str = None):
         self.credentials_file = credentials_file
+        if token_file:
+            self.token_file = Path(token_file)
+        else:
+            self.token_file = Path(credentials_file).expanduser().resolve().parent / "youtube_token.pickle"
         self.youtube = self._authenticate()
     
     def _authenticate(self):
         """OAuth 2.0 인증 (토큰 캐싱으로 재인증 불필요)"""
         credentials = None
-        token_path = Path(TOKEN_FILE)
+        token_path = self.token_file
         
         # 저장된 토큰 불러오기
         if token_path.exists():
@@ -163,11 +168,24 @@ class YouTubeUploader:
     
     def _upload_thumbnail(self, video_id: str, thumbnail_path: str):
         """썸네일 업로드"""
+        upload_path = Path(thumbnail_path)
+        temp_path = None
         try:
+            if upload_path.suffix.lower() == ".gif":
+                with Image.open(upload_path) as img:
+                    frame = img.convert("RGB")
+                    with tempfile.NamedTemporaryFile(suffix=".png", delete=False) as tmp:
+                        temp_path = Path(tmp.name)
+                    frame.save(temp_path, format="PNG")
+                upload_path = temp_path
+
             self.youtube.thumbnails().set(
                 videoId=video_id,
-                media_body=MediaFileUpload(thumbnail_path)
+                media_body=MediaFileUpload(str(upload_path))
             ).execute()
             print("   🖼️  썸네일 업로드 완료")
         except googleapiclient.errors.HttpError as e:
             print(f"   ⚠️  썸네일 업로드 실패 (동영상은 정상 업로드됨): {e}")
+        finally:
+            if temp_path and temp_path.exists():
+                temp_path.unlink(missing_ok=True)

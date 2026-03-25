@@ -118,6 +118,40 @@ python main.py watch "./suno_downloads" --persona "K-POP AI 아티스트, 밝고
 --interval      감시 간격 (초, 기본: 30)
 ```
 
+### 메뉴바 자동 실행
+
+macOS에서는 로그인 시 메뉴바를 자동으로 띄울 수 있습니다.
+
+```bash
+./scripts/install-menu-bar-autostart.sh
+```
+
+해제:
+
+```bash
+./scripts/uninstall-menu-bar-autostart.sh
+```
+
+### Windows 배포 실행파일 빌드
+
+Windows PC 또는 GitHub Actions의 `windows-latest` 러너에서 아래 스크립트를 실행합니다.
+
+```bat
+scripts\build-windows.bat
+```
+
+산출물:
+
+```text
+dist\windows\SunoUploader\SunoUploader.exe
+dist\windows\SunoUploader\.env.example
+dist\windows\SunoUploader\README-windows.txt
+```
+
+참고:
+- PyInstaller는 macOS에서 Windows `.exe`를 직접 크로스빌드하지 못합니다.
+- `ffmpeg.exe`를 실행파일 옆에 두거나, 시스템 PATH에 `ffmpeg`를 추가해야 합니다.
+
 ---
 
 ## 📁 파일 구조
